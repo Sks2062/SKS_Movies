@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: frame-movie-platform
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm --prefix frontend-files ci && npm --prefix frontend-files run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    initialDeployHook: npm run init-db && npm run create-admin
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: ADMIN_NAME
+        value: Shrawan
+      - key: ADMIN_EMAIL
+        value: shrawan.sks2062@gmail.com
+      - key: ADMIN_PASSWORD
+        sync: false
