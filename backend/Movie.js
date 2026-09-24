@@ -5,7 +5,15 @@ const movieSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
     posterUrl: { type: String, required: true },
-    videoUrl: { type: String, required: true },
+    videoUrl: { type: String, default: '' }, // Legacy external URL; new uploads use Mux.
+    muxAssetId: { type: String, default: '' },
+    muxUploadId: { type: String, default: '' },
+    muxPlaybackId: { type: String, default: '' },
+    muxStatus: {
+      type: String,
+      enum: ['pending_upload', 'processing', 'ready', 'error'],
+      default: 'ready'
+    },
     downloadUrl: { type: String, trim: true, default: '' },
     genre: [{ type: String }],
     releaseYear: { type: Number, required: true },

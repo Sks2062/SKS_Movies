@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+
+const MuxUploader = lazy(() => import('@mux/mux-uploader-react'));
 
 const emptyForm = {
   title: '',
@@ -10,7 +12,6 @@ const emptyForm = {
   duration: '',
   cast: '',
   posterUrl: '',
-  videoUrl: '',
   downloadUrl: '',
   allowStreaming: true,
   allowDownload: false
@@ -19,6 +20,9 @@ const emptyForm = {
 export default function AddMovie() {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
+  const [uploadEndpoint, setUploadEndpoint] = useState('');
+  const [uploadComplete, setUploadComplete] = useState(false);
+  const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
 
   const update = (field) => (e) => {
@@ -29,29 +33,29 @@ export default function AddMovie() {
   const onSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSaving(true);
     try {
-      await api.post('/admin/movies', {
+      const res = await api.post('/admin/movies', {
         ...form,
         genre: form.genre.split(',').map((g) => g.trim()).filter(Boolean),
         cast: form.cast.split(',').map((c) => c.trim()).filter(Boolean),
         releaseYear: Number(form.releaseYear),
         duration: form.duration ? Number(form.duration) : undefined
       });
-      navigate('/admin/movies');
+      setUploadEndpoint(res.data.uploadUrl);
     } catch (err) {
       setError(err.response?.data?.message || 'Something went wrong');
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-14">
       <h1 className="font-display text-3xl">Add a movie</h1>
-      <p className="text-muted text-sm mt-2">
-        Poster and video URLs currently point at wherever you've already uploaded the files
-        (e.g. your S3 bucket). A direct upload endpoint can replace these two fields later.
-      </p>
+      <p className="text-muted text-sm mt-2">Add the movie details, then upload its video directly to Mux.</p>
 
-      <form onSubmit={onSubmit} className="mt-8 space-y-4">
+      {!uploadEndpoint ? <form onSubmit={onSubmit} className="mt-8 space-y-4">
         <Field label="Title">
           <input required value={form.title} onChange={update('title')} className={inputClass} />
         </Field>
@@ -88,10 +92,6 @@ export default function AddMovie() {
           <input required value={form.posterUrl} onChange={update('posterUrl')} className={inputClass} />
         </Field>
 
-        <Field label="Video URL">
-          <input required value={form.videoUrl} onChange={update('videoUrl')} className={inputClass} />
-        </Field>
-
         <Field label="Download URL (optional)">
           <input
             type="url"
@@ -117,11 +117,39 @@ export default function AddMovie() {
 
         <button
           type="submit"
+          disabled={saving}
           className="bg-gold text-bg rounded-md px-6 py-2.5 text-sm font-medium hover:bg-goldDeep transition-colors"
         >
-          Upload movie
+          {saving ? 'Preparing upload…' : 'Save details and continue'}
         </button>
-      </form>
+      </form> : (
+        <div className="mt-8 space-y-5">
+          <div>
+            <h2 className="font-display text-xl">Upload video to Mux</h2>
+            <p className="text-muted text-sm mt-1">The video uploads directly to Mux. It may take a few minutes to process before streaming is ready.</p>
+          </div>
+          <Suspense fallback={<p className="text-muted text-sm">Loading video uploader…</p>}>
+            <MuxUploader
+              endpoint={uploadEndpoint}
+              onSuccess={() => setUploadComplete(true)}
+              onUploadError={() => setError('The upload failed. Use the retry option or return to manage movies.')}
+            />
+          </Suspense>
+          {error && <p className="text-sm text-red-400">{error}</p>}
+          {uploadComplete && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted">Upload complete. Mux is processing the video; its status will update in Manage movies.</p>
+              <button
+                type="button"
+                onClick={() => navigate('/admin/movies')}
+                className="bg-gold text-bg rounded-md px-6 py-2.5 text-sm font-medium hover:bg-goldDeep transition-colors"
+              >
+                Go to manage movies
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

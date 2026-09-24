@@ -9,6 +9,8 @@ export default function ManageMovies() {
 
   useEffect(() => {
     load();
+    const refresh = setInterval(load, 15000);
+    return () => clearInterval(refresh);
   }, []);
 
   const remove = async (id) => {
@@ -47,6 +49,12 @@ export default function ManageMovies() {
               <p className="text-muted text-sm">
                 {movie.releaseYear} · {movie.views} views · {movie.downloads} downloads
               </p>
+              {movie.muxStatus && movie.muxStatus !== 'ready' && (
+                <p className="mt-1 text-xs text-gold">
+                  {movie.muxStatus === 'pending_upload' ? 'Waiting for video upload' :
+                    movie.muxStatus === 'processing' ? 'Mux is processing video' : 'Mux video processing failed'}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-4 text-sm">
