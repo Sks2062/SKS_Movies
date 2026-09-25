@@ -2,6 +2,20 @@ const Movie = require('./Movie');
 const User = require('./User');
 const { getMuxClient } = require('./muxClient');
 
+const isTeraBoxShareUrl = (value) => {
+  try {
+    const url = new URL(value);
+    const hosts = new Set([
+      'terabox.com', 'www.terabox.com', 'terabox.app', 'www.terabox.app',
+      '1024terabox.com', 'www.1024terabox.com', 'freeterabox.com', 'www.freeterabox.com',
+      'terasharelink.com', 'www.terasharelink.com'
+    ]);
+    return url.protocol === 'https:' && hosts.has(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+};
+
 // @route GET /api/admin/movies
 const listMovies = async (req, res) => {
   try {
@@ -16,7 +30,7 @@ const listMovies = async (req, res) => {
 const addMovie = async (req, res) => {
   let movie;
   try {
-    const mux = getMuxClient();
+    const videoProvider = req.body.videoProvider === 'terabox' ? 'terabox' : 'mux';
     const movieData = {
       title: req.body.title,
       description: req.body.description,
@@ -25,13 +39,25 @@ const addMovie = async (req, res) => {
       duration: req.body.duration,
       cast: req.body.cast,
       posterUrl: req.body.posterUrl,
+      videoProvider,
+      videoUrl: videoProvider === 'terabox' ? req.body.videoUrl : '',
       downloadUrl: req.body.downloadUrl || '',
       allowStreaming: req.body.allowStreaming,
       allowDownload: req.body.allowDownload,
-      muxStatus: 'pending_upload',
+      muxStatus: videoProvider === 'terabox' ? 'ready' : 'pending_upload',
       uploadedBy: req.user._id
     };
 
+    if (videoProvider === 'terabox') {
+      if (!isTeraBoxShareUrl(req.body.videoUrl)) {
+        return res.status(400).json({ message: 'Use an HTTPS TeraBox share URL' });
+      }
+
+      movie = await Movie.create(movieData);
+      return res.status(201).json({ movie });
+    }
+
+    const mux = getMuxClient();
     movie = await Movie.create(movieData);
     const upload = await mux.video.uploads.create({
       cors_origin: req.get('origin') || process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL || 'http://localhost:5173',
@@ -58,7 +84,14 @@ const addMovie = async (req, res) => {
 // @route PUT /api/admin/movies/:id
 const updateMovie = async (req, res) => {
   try {
-    const movie = await Movie.findByIdAndUpdate(req.params.id, req.body, {
+    const updates = { ...req.body };
+    if (updates.videoProvider === 'terabox' || updates.videoUrl) {
+      if (!isTeraBoxShareUrl(updates.videoUrl)) {
+        return res.status(400).json({ message: 'Use an HTTPS TeraBox share URL' });
+      }
+      updates.videoProvider = 'terabox';
+    }
+    const movie = await Movie.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true
     });

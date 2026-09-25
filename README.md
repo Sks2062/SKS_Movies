@@ -39,3 +39,7 @@ For a production build, run `npm ci`, `npm --prefix frontend-files ci`, `npm run
 - `render.yaml` — one-service Render deployment configuration
 
 New videos are uploaded to Mux with signed playback. Previously stored direct video URLs remain supported during migration. Use media you have the rights to distribute.
+
+### TeraBox share links
+
+In **Add a movie**, choose **TeraBox share link** and paste an HTTPS TeraBox share URL. The protected watch page opens the share page in an embedded player and provides a link to open it directly on TeraBox if embedding is blocked. The shared file must be accessible to viewers. For direct HLS playback through TeraBox's official API, configure an approved TeraBox developer app and its authorization flow; a public share URL alone does not provide API playback credentials.

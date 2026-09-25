@@ -35,12 +35,28 @@ export default function WatchMovie() {
           </Suspense>
         )}
         {playback?.streamUrl && (
-          <video controls autoPlay className="w-full h-full" src={playback.streamUrl}>
-            Your browser does not support video playback.
-          </video>
+          playback.provider === 'terabox' ? (
+            <iframe
+              title="TeraBox video player"
+              src={playback.streamUrl}
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+              className="w-full h-full border-0"
+            />
+          ) : (
+            <video controls autoPlay className="w-full h-full" src={playback.streamUrl}>
+              Your browser does not support video playback.
+            </video>
+          )
         )}
         {!playback && !error && <p className="text-muted text-sm">Preparing playback…</p>}
       </div>
+      {playback?.provider === 'terabox' && (
+        <p className="mt-3 text-sm text-muted">
+          If the player does not load, <a href={playback.streamUrl} target="_blank" rel="noreferrer" className="text-gold hover:underline">open this video on TeraBox</a>.
+        </p>
+      )}
     </div>
   );
 }

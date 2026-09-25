@@ -29,6 +29,11 @@ export default function ManageMovies() {
     load();
   };
 
+  const saveVideoUrl = async (movie, videoUrl) => {
+    await api.put(`/admin/movies/${movie._id}`, { videoUrl, videoProvider: 'terabox' });
+    load();
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-14">
       <div className="flex items-center justify-between">
@@ -75,6 +80,7 @@ export default function ManageMovies() {
                 Download
               </label>
               <DownloadUrlEditor movie={movie} onSave={saveDownloadUrl} />
+              {movie.videoProvider === 'terabox' && <TeraBoxUrlEditor movie={movie} onSave={saveVideoUrl} />}
               <button onClick={() => remove(movie._id)} className="text-red-400 hover:underline">
                 Delete
               </button>
@@ -85,6 +91,33 @@ export default function ManageMovies() {
         {movies.length === 0 && <p className="text-muted py-6">No movies yet.</p>}
       </div>
     </div>
+  );
+}
+
+function TeraBoxUrlEditor({ movie, onSave }) {
+  const [url, setUrl] = useState(movie.videoUrl || '');
+
+  useEffect(() => setUrl(movie.videoUrl || ''), [movie.videoUrl]);
+
+  return (
+    <form
+      className="flex w-full gap-2 md:w-auto"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave(movie, url);
+      }}
+    >
+      <input
+        type="url"
+        required
+        value={url}
+        onChange={(event) => setUrl(event.target.value)}
+        placeholder="TeraBox video link"
+        aria-label={`TeraBox video link for ${movie.title}`}
+        className="min-w-0 flex-1 rounded-md border border-line bg-elevated px-3 py-1.5 text-xs md:w-52"
+      />
+      <button type="submit" className="text-gold hover:underline">Save video</button>
+    </form>
   );
 }
 

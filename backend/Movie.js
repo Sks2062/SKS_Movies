@@ -6,6 +6,7 @@ const movieSchema = new mongoose.Schema(
     description: { type: String, required: true },
     posterUrl: { type: String, required: true },
     videoUrl: { type: String, default: '' }, // Legacy external URL; new uploads use Mux.
+    videoProvider: { type: String, enum: ['', 'mux', 'terabox'], default: '' },
     muxAssetId: { type: String, default: '' },
     muxUploadId: { type: String, default: '' },
     muxPlaybackId: { type: String, default: '' },

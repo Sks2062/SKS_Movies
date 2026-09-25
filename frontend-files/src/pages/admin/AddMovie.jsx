@@ -12,6 +12,8 @@ const emptyForm = {
   duration: '',
   cast: '',
   posterUrl: '',
+  videoProvider: 'mux',
+  videoUrl: '',
   downloadUrl: '',
   allowStreaming: true,
   allowDownload: false
@@ -42,7 +44,8 @@ export default function AddMovie() {
         releaseYear: Number(form.releaseYear),
         duration: form.duration ? Number(form.duration) : undefined
       });
-      setUploadEndpoint(res.data.uploadUrl);
+      if (res.data.uploadUrl) setUploadEndpoint(res.data.uploadUrl);
+      else navigate('/admin/movies');
     } catch (err) {
       setError(err.response?.data?.message || 'Something went wrong');
     } finally {
@@ -53,9 +56,29 @@ export default function AddMovie() {
   return (
     <div className="max-w-2xl mx-auto px-6 py-14">
       <h1 className="font-display text-3xl">Add a movie</h1>
-      <p className="text-muted text-sm mt-2">Add the movie details, then upload its video directly to Mux.</p>
+      <p className="text-muted text-sm mt-2">Add the movie details, then choose where its video is hosted.</p>
 
       {!uploadEndpoint ? <form onSubmit={onSubmit} className="mt-8 space-y-4">
+        <Field label="Video source">
+          <select value={form.videoProvider} onChange={update('videoProvider')} className={inputClass}>
+            <option value="mux">Upload video to Mux</option>
+            <option value="terabox">TeraBox share link</option>
+          </select>
+        </Field>
+
+        {form.videoProvider === 'terabox' && (
+          <Field label="TeraBox share URL">
+            <input
+              type="url"
+              required
+              value={form.videoUrl}
+              onChange={update('videoUrl')}
+              className={inputClass}
+              placeholder="https://www.terabox.com/s/..."
+            />
+          </Field>
+        )}
+
         <Field label="Title">
           <input required value={form.title} onChange={update('title')} className={inputClass} />
         </Field>
@@ -120,7 +143,7 @@ export default function AddMovie() {
           disabled={saving}
           className="bg-gold text-bg rounded-md px-6 py-2.5 text-sm font-medium hover:bg-goldDeep transition-colors"
         >
-          {saving ? 'Preparing upload…' : 'Save details and continue'}
+          {saving ? 'Saving…' : form.videoProvider === 'terabox' ? 'Save movie' : 'Save details and continue'}
         </button>
       </form> : (
         <div className="mt-8 space-y-5">

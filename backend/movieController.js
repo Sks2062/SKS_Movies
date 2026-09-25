@@ -69,6 +69,10 @@ const streamMovie = async (req, res) => {
       return res.json({ playbackId: movie.muxPlaybackId, tokens: muxTokens, expiresInSeconds: 7200 });
     }
 
+    if (movie.videoProvider === 'terabox') {
+      return res.json({ provider: 'terabox', streamUrl: movie.videoUrl, expiresInSeconds: 3600 });
+    }
+
     // Keep previously added direct video URLs playable during migration.
     res.json({ streamUrl: movie.videoUrl, expiresInSeconds: 3600 });
   } catch (err) {
