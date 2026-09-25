@@ -8,6 +8,7 @@ export default function WatchMovie() {
   const { id } = useParams();
   const [playback, setPlayback] = useState(null);
   const [error, setError] = useState('');
+  const isTeraBoxPlayerPage = playback?.provider === 'terabox' && playback.streamUrl?.includes('/play/video');
 
   useEffect(() => {
     api
@@ -35,7 +36,21 @@ export default function WatchMovie() {
           </Suspense>
         )}
         {playback?.streamUrl && (
-          playback.provider === 'terabox' ? (
+          isTeraBoxPlayerPage ? (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-4 px-6 text-center">
+              <p className="text-muted text-sm max-w-lg">
+                This is a TeraBox player page, which cannot be displayed inside this site. Open it on TeraBox to watch.
+              </p>
+              <a
+                href={playback.streamUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="bg-gold text-bg rounded-full px-6 py-2.5 text-sm font-medium hover:bg-goldDeep transition-colors"
+              >
+                ▶ Open video on TeraBox
+              </a>
+            </div>
+          ) : playback.provider === 'terabox' ? (
             <iframe
               title="TeraBox video player"
               src={playback.streamUrl}
@@ -52,7 +67,7 @@ export default function WatchMovie() {
         )}
         {!playback && !error && <p className="text-muted text-sm">Preparing playback…</p>}
       </div>
-      {playback?.provider === 'terabox' && (
+      {playback?.provider === 'terabox' && !isTeraBoxPlayerPage && (
         <p className="mt-3 text-sm text-muted">
           If the player does not load, <a href={playback.streamUrl} target="_blank" rel="noreferrer" className="text-gold hover:underline">open this video on TeraBox</a>.
         </p>
