@@ -7,6 +7,7 @@ const isTeraBoxShareUrl = (value) => {
     const url = new URL(value);
     const hosts = new Set([
       'terabox.com', 'www.terabox.com', 'terabox.app', 'www.terabox.app',
+      'dm.terabox.com',
       '1024terabox.com', 'www.1024terabox.com', 'freeterabox.com', 'www.freeterabox.com',
       'terasharelink.com', 'www.terasharelink.com'
     ]);

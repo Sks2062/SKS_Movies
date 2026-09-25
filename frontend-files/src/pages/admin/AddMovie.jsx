@@ -67,7 +67,7 @@ export default function AddMovie() {
         </Field>
 
         {form.videoProvider === 'terabox' && (
-          <Field label="TeraBox share URL">
+          <Field label="TeraBox video or share URL">
             <input
               type="url"
               required
