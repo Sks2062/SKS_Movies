@@ -111,8 +111,8 @@ export default function AddMovie() {
           </Field>
         </div>
 
-        <Field label="Poster URL">
-          <input required value={form.posterUrl} onChange={update('posterUrl')} className={inputClass} />
+        <Field label="Poster URL (optional)">
+          <input value={form.posterUrl} onChange={update('posterUrl')} className={inputClass} placeholder="Leave blank if you don't have one" />
         </Field>
 
         <Field label="Download URL (optional)">

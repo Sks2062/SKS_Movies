@@ -30,8 +30,10 @@ export default function MovieDetails() {
     <div className="max-w-5xl mx-auto px-6 py-14">
       <div className="grid md:grid-cols-[280px_1fr] gap-10">
         <div className="aspect-[2/3] bg-elevated border border-line rounded-sm overflow-hidden">
-          {movie.posterUrl && (
+          {movie.posterUrl ? (
             <img src={movie.posterUrl} alt={movie.title} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-muted text-sm">No poster</div>
           )}
         </div>
 
