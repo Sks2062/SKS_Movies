@@ -40,6 +40,6 @@ For a production build, run `npm ci`, `npm --prefix frontend-files ci`, `npm run
 
 New videos are uploaded to Mux with signed playback. Previously stored direct video URLs remain supported during migration. Use media you have the rights to distribute.
 
-### TeraBox share links
+### TeraBox streaming
 
-In **Add a movie**, choose **TeraBox share link** and paste an HTTPS TeraBox share URL. The protected watch page opens the share page in an embedded player and provides a link to open it directly on TeraBox if embedding is blocked. The shared file must be accessible to viewers. For direct HLS playback through TeraBox's official API, configure an approved TeraBox developer app and its authorization flow; a public share URL alone does not provide API playback credentials.
+In **Add a movie**, choose **TeraBox share link** and paste a TeraBox player URL containing a `path` parameter. For inline HLS playback, configure `TERABOX_ACCESS_TOKEN` and optionally `TERABOX_API_DOMAIN` on the server. The token must come from an approved TeraBox developer app and authorize the account that owns the file. TeraBox access tokens expire after two days, so renew the token as documented by TeraBox. Do not put the token in frontend settings or source code. The server proxies the playlist and video segments through authenticated movie routes so the TeraBox token stays server-side.
