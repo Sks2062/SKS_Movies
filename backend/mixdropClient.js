@@ -29,12 +29,25 @@ const parseResponse = async (response) => {
   return payload.result;
 };
 
-const uploadVideoFile = async (file) => {
+const request = async (endpoint, params = {}) => {
+  const { email, key } = getCredentials();
+  const url = new URL(endpoint);
+  url.searchParams.set('email', email);
+  url.searchParams.set('key', key);
+  Object.entries(params).forEach(([name, value]) => {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(name, value);
+  });
+  const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  return parseResponse(response);
+};
+
+const uploadVideoFile = async (file, folder) => {
   const { email, key } = getCredentials();
   const form = new FormData();
   const filename = (file.originalname || 'video').replace(/[\r\n"]/g, '_');
   form.append('email', email);
   form.append('key', key);
+  if (folder) form.append('folder', folder);
   form.append('file', fs.createReadStream(file.path), {
     filename,
     contentType: file.mimetype || 'application/octet-stream'
@@ -53,6 +66,16 @@ const uploadVideoFile = async (file) => {
   return parseResponse(response);
 };
 
+const remoteUploadVideo = (sourceUrl, name, folder) => request('https://api.mixdrop.ag/remoteupload', {
+  url: sourceUrl,
+  name,
+  folder
+});
+
+const getRemoteStatus = (id) => request('https://api.mixdrop.ag/remotestatus', { id });
+
+const listFolders = (parent) => request('https://api.mixdrop.ag/folderlist', { id: parent });
+
 const getFileInfo = async (fileref) => {
   const { email, key } = getCredentials();
   const url = new URL('https://api.mixdrop.ag/fileinfo2');
@@ -64,4 +87,4 @@ const getFileInfo = async (fileref) => {
   return result?.[fileref] || null;
 };
 
-module.exports = { uploadVideoFile, getFileInfo };
+module.exports = { uploadVideoFile, remoteUploadVideo, getRemoteStatus, getFileInfo, listFolders };

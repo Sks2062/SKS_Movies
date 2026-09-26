@@ -4,6 +4,7 @@ const multer = require('multer');
 const {
   addMovie,
   listMovies,
+  listMixDropFolders,
   refreshMixDropStatus,
   updateMovie,
   deleteMovie,
@@ -35,6 +36,7 @@ const handleUpload = (req, res, next) => {
 router.use(protect, adminOnly);
 
 router.get('/movies', listMovies);
+router.get('/mixdrop/folders', listMixDropFolders);
 router.post('/movies', handleUpload, addMovie);
 router.post('/movies/:id/mixdrop-status', refreshMixDropStatus);
 router.put('/movies/:id', updateMovie);

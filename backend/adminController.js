@@ -1,7 +1,22 @@
 const fs = require('fs/promises');
 const Movie = require('./Movie');
 const User = require('./User');
-const { uploadVideoFile, getFileInfo } = require('./mixdropClient');
+const {
+  uploadVideoFile,
+  remoteUploadVideo,
+  getRemoteStatus,
+  getFileInfo,
+  listFolders: getMixDropFolders
+} = require('./mixdropClient');
+
+const isHttpsUrl = (value) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+};
 
 const getMixDropEmbedUrl = (value) => {
   try {
@@ -41,21 +56,37 @@ const listMovies = async (req, res) => {
   }
 };
 
+// @route GET /api/admin/mixdrop/folders
+const listMixDropFolders = async (req, res) => {
+  try {
+    const result = await getMixDropFolders();
+    res.json((result?.folders || []).map(({ id, title }) => ({ id: String(id), title })));
+  } catch (err) {
+    res.status(err.status || 502).json({ message: err.message || 'Unable to load MixDrop folders.' });
+  }
+};
+
 // @route POST /api/admin/movies
 const addMovie = async (req, res) => {
   let tempFile;
   try {
+    const isRemoteImport = req.body.importMode === 'remote';
     tempFile = req.file?.path;
-    if (!isVideoFile(req.file)) {
+    if (isRemoteImport && !isHttpsUrl(req.body.sourceUrl)) {
+      return res.status(400).json({ message: 'Use a public HTTPS direct-download URL for MixDrop remote upload.' });
+    }
+    if (!isRemoteImport && !isVideoFile(req.file)) {
       return res.status(400).json({ message: 'Choose a supported video file to upload.' });
     }
     if (!req.body.title?.trim() || !req.body.description?.trim()) {
       return res.status(400).json({ message: 'Movie title and description are required.' });
     }
-    const uploadedFile = await uploadVideoFile(req.file);
+    const uploadedFile = isRemoteImport
+      ? await remoteUploadVideo(req.body.sourceUrl, req.body.title, req.body.folder)
+      : await uploadVideoFile(req.file, req.body.folder);
     const embedUrl = getMixDropEmbedUrl(uploadedFile?.embedurl);
-    if (!uploadedFile?.fileref || !embedUrl) {
-      return res.status(502).json({ message: 'MixDrop uploaded the file but did not return a valid player link.' });
+    if (isRemoteImport ? !uploadedFile?.id : (!uploadedFile?.fileref || !embedUrl)) {
+      return res.status(502).json({ message: 'MixDrop did not return the expected upload reference.' });
     }
 
     const movie = await Movie.create({
@@ -68,8 +99,9 @@ const addMovie = async (req, res) => {
       posterUrl: req.body.posterUrl,
       videoProvider: 'mixdrop',
       videoUrl: embedUrl,
-      mixdropFileRef: String(uploadedFile.fileref),
-      mixdropStatus: 'Uploaded',
+      mixdropRemoteId: isRemoteImport ? String(uploadedFile.id) : '',
+      mixdropFileRef: uploadedFile.fileref ? String(uploadedFile.fileref) : '',
+      mixdropStatus: isRemoteImport ? (uploadedFile.fileref ? 'Processing' : 'Queued') : 'Uploaded',
       downloadUrl: req.body.downloadUrl || '',
       allowStreaming: req.body.allowStreaming !== 'false',
       allowDownload: req.body.allowDownload === 'true',
@@ -88,12 +120,15 @@ const refreshMixDropStatus = async (req, res) => {
   try {
     const movie = await Movie.findById(req.params.id);
     if (!movie) return res.status(404).json({ message: 'Movie not found' });
-    if (!movie.mixdropFileRef) return res.status(400).json({ message: 'This movie has no MixDrop file reference to check.' });
-
-    const fileInfo = await getFileInfo(movie.mixdropFileRef);
-    if (!fileInfo) return res.status(404).json({ message: 'MixDrop could not find this uploaded file.' });
-    movie.mixdropStatus = fileInfo.status || movie.mixdropStatus;
-    movie.videoUrl = getMixDropEmbedUrl(fileInfo.embedurl) || movie.videoUrl;
+    let remoteInfo = null;
+    if (movie.mixdropRemoteId) {
+      remoteInfo = await getRemoteStatus(movie.mixdropRemoteId);
+      if (remoteInfo?.fileref) movie.mixdropFileRef = remoteInfo.fileref;
+    }
+    const fileInfo = movie.mixdropFileRef ? await getFileInfo(movie.mixdropFileRef) : null;
+    if (!remoteInfo && !fileInfo) return res.status(404).json({ message: 'MixDrop could not find this uploaded file.' });
+    movie.mixdropStatus = fileInfo?.status || remoteInfo?.status || movie.mixdropStatus;
+    movie.videoUrl = getMixDropEmbedUrl(fileInfo?.embedurl || remoteInfo?.embedurl) || movie.videoUrl;
     await movie.save();
     res.json({
       status: movie.mixdropStatus,
@@ -166,4 +201,4 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = { listMovies, addMovie, refreshMixDropStatus, updateMovie, deleteMovie, listUsers, getStats };
+module.exports = { listMovies, listMixDropFolders, addMovie, refreshMixDropStatus, updateMovie, deleteMovie, listUsers, getStats };
