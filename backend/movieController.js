@@ -36,11 +36,11 @@ const streamMovie = async (req, res) => {
     if (!movie.allowStreaming) {
       return res.status(403).json({ message: 'Streaming is not enabled for this title' });
     }
-    if (movie.videoProvider !== 'mixdrop') {
-      return res.status(410).json({ message: 'This movie uses a retired video provider. Re-import it through MixDrop.' });
+    if (!['mixdrop', 'streamtape'].includes(movie.videoProvider)) {
+      return res.status(410).json({ message: 'This movie uses a retired video provider. Re-import it through a supported host.' });
     }
     if (!movie.videoUrl) {
-      return res.status(409).json({ message: 'MixDrop is still importing this video. Ask an admin to refresh its status.' });
+      return res.status(409).json({ message: `${movie.videoProvider === 'streamtape' ? 'Streamtape' : 'MixDrop'} is still importing this video. Ask an admin to refresh its status.` });
     }
 
     movie.views += 1;
@@ -50,7 +50,7 @@ const streamMovie = async (req, res) => {
       $push: { watchHistory: { movie: movie._id, watchedAt: new Date() } }
     });
 
-    res.json({ provider: 'mixdrop', embedUrl: movie.videoUrl });
+    res.json({ provider: movie.videoProvider, embedUrl: movie.videoUrl });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

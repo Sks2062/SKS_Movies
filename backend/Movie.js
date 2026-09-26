@@ -5,11 +5,14 @@ const movieSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
     posterUrl: { type: String, default: '' },
-    videoUrl: { type: String, default: '' }, // MixDrop player embed URL.
-    videoProvider: { type: String, enum: ['mixdrop'], default: 'mixdrop' },
+    videoUrl: { type: String, default: '' }, // Provider player embed URL.
+    videoProvider: { type: String, enum: ['mixdrop', 'streamtape'], default: 'mixdrop' },
     mixdropRemoteId: { type: String, default: '' },
     mixdropFileRef: { type: String, default: '' },
     mixdropStatus: { type: String, default: 'queued' },
+    streamtapeFileId: { type: String, default: '' },
+    streamtapeRemoteId: { type: String, default: '' },
+    streamtapeStatus: { type: String, default: '' },
     downloadUrl: { type: String, trim: true, default: '' },
     genre: [{ type: String }],
     releaseYear: { type: Number, required: true },

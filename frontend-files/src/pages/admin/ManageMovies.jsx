@@ -38,6 +38,15 @@ export default function ManageMovies() {
     }
   };
 
+  const refreshStreamtapeStatus = async (movie) => {
+    try {
+      await api.post(`/admin/movies/${movie._id}/streamtape-status`);
+      await load();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Could not refresh Streamtape status.');
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-14">
       <div className="flex items-center justify-between">
@@ -59,7 +68,9 @@ export default function ManageMovies() {
                 {movie.releaseYear} · {movie.views} views · {movie.downloads} downloads
               </p>
               <p className="mt-1 text-xs text-gold">
-                {movie.videoUrl ? `MixDrop embed created · ${movie.mixdropStatus || 'processing'}` : `MixDrop import: ${movie.mixdropStatus || 'queued'}`}
+                {movie.videoProvider === 'streamtape'
+                  ? `Streamtape ${movie.videoUrl ? 'player ready' : 'import'} · ${movie.streamtapeStatus || 'processing'}`
+                  : `MixDrop ${movie.videoUrl ? 'embed created' : 'import'} · ${movie.mixdropStatus || 'queued'}`}
               </p>
             </div>
 
@@ -84,6 +95,11 @@ export default function ManageMovies() {
               {movie.mixdropFileRef && (
                 <button onClick={() => refreshMixDropStatus(movie)} className="text-gold hover:underline">
                   Refresh MixDrop status
+                </button>
+              )}
+              {movie.videoProvider === 'streamtape' && movie.streamtapeRemoteId && (
+                <button onClick={() => refreshStreamtapeStatus(movie)} className="text-gold hover:underline">
+                  Refresh Streamtape status
                 </button>
               )}
               <button onClick={() => remove(movie._id)} className="text-red-400 hover:underline">

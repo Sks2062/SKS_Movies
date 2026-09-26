@@ -8,6 +8,7 @@ const {
   getFileInfo,
   listFolders: getMixDropFolders
 } = require('./mixdropClient');
+const streamtape = require('./streamtapeClient');
 
 const isHttpsUrl = (value) => {
   try {
@@ -28,6 +29,19 @@ const getMixDropEmbedUrl = (value) => {
     return '';
   }
 };
+
+const getStreamtapeEmbedUrl = (value) => {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    const id = url.pathname.match(/^\/(?:e|v)\/([a-z0-9_-]+)(?:\/[^/]*)?\/?$/i)?.[1];
+    return url.protocol === 'https:' && /(^|\.)streamtape\.com$/.test(host) && id
+      ? `https://streamtape.com/e/${id}`
+      : '';
+  } catch { return ''; }
+};
+
+const getStreamtapeId = (value) => getStreamtapeEmbedUrl(value).match(/\/e\/([^/]+)/)?.[1] || '';
 
 const isUserProvidedMixDropEmbed = (value) => {
   const embedUrl = getMixDropEmbedUrl(value);
@@ -73,26 +87,72 @@ const listMixDropFolders = async (req, res) => {
   }
 };
 
+const listStreamtapeFolders = async (req, res) => {
+  try {
+    const folders = await streamtape.getFolders();
+    res.json(folders.map(({ id, name }) => ({ id: String(id), title: name })));
+  } catch (err) {
+    res.status(err.status || 502).json({ message: err.message || 'Unable to load Streamtape folders.' });
+  }
+};
+
 // @route POST /api/admin/movies
 const addMovie = async (req, res) => {
   let tempFile;
   try {
+    const provider = req.body.videoProvider === 'streamtape' ? 'streamtape' : 'mixdrop';
     const importMode = req.body.importMode || 'file';
     const isRemoteImport = importMode === 'remote';
     const isExistingEmbed = importMode === 'embed';
     tempFile = req.file?.path;
     if (isRemoteImport && !isHttpsUrl(req.body.sourceUrl)) {
-      return res.status(400).json({ message: 'Use a public HTTPS direct-download URL for MixDrop remote upload.' });
+      return res.status(400).json({ message: 'Use a public HTTPS direct-download URL for remote upload.' });
     }
     if (!isRemoteImport && !isVideoFile(req.file)) {
       if (!isExistingEmbed) return res.status(400).json({ message: 'Choose a supported video file to upload.' });
     }
-    if (isExistingEmbed && !isUserProvidedMixDropEmbed(req.body.embedUrl)) {
-      return res.status(400).json({ message: 'Paste a valid HTTPS MixDrop embed link, such as https://mixdrop.top/e/FILE_ID.' });
+    if (isExistingEmbed && !(provider === 'streamtape' ? getStreamtapeEmbedUrl(req.body.embedUrl) : isUserProvidedMixDropEmbed(req.body.embedUrl))) {
+      return res.status(400).json({ message: provider === 'streamtape'
+        ? 'Paste a valid HTTPS Streamtape player link, such as https://streamtape.com/e/FILE_ID.'
+        : 'Paste a valid HTTPS MixDrop embed link, such as https://mixdrop.top/e/FILE_ID.' });
     }
     if (!req.body.title?.trim() || !req.body.description?.trim()) {
       return res.status(400).json({ message: 'Movie title and description are required.' });
     }
+    if (provider === 'streamtape') {
+      const uploaded = isExistingEmbed
+        ? { fileId: getStreamtapeId(req.body.embedUrl), status: 'Ready' }
+        : isRemoteImport
+          ? await streamtape.remoteUploadVideo(req.body.sourceUrl, req.body.title, req.body.folder)
+          : await streamtape.uploadVideoFile(req.file, req.body.folder);
+      const remoteId = isRemoteImport ? String(uploaded?.id || '') : '';
+      const fileId = uploaded?.fileId || uploaded?.linkid || (isRemoteImport ? '' : uploaded?.id) || '';
+      const embedUrl = fileId ? `https://streamtape.com/e/${encodeURIComponent(fileId)}` : '';
+      if (isExistingEmbed && !embedUrl) return res.status(400).json({ message: 'Could not read the Streamtape file ID from that link.' });
+      if (!isExistingEmbed && isRemoteImport && !remoteId) return res.status(502).json({ message: 'Streamtape did not return a remote upload ID.' });
+      if (!isExistingEmbed && !isRemoteImport && !embedUrl) return res.status(502).json({ message: 'Streamtape uploaded the file but did not return a player ID. Refresh the file listing and try again.' });
+
+      const movie = await Movie.create({
+        title: req.body.title,
+        description: req.body.description,
+        genre: toList(req.body.genre),
+        releaseYear: Number(req.body.releaseYear),
+        duration: req.body.duration ? Number(req.body.duration) : undefined,
+        cast: toList(req.body.cast),
+        posterUrl: req.body.posterUrl,
+        videoProvider: 'streamtape',
+        videoUrl: embedUrl,
+        streamtapeFileId: String(fileId),
+        streamtapeRemoteId: remoteId,
+        streamtapeStatus: isExistingEmbed ? 'Ready' : (isRemoteImport ? 'Queued' : (uploaded.status || 'Uploaded')),
+        downloadUrl: req.body.downloadUrl || '',
+        allowStreaming: req.body.allowStreaming !== 'false',
+        allowDownload: req.body.allowDownload === 'true',
+        uploadedBy: req.user._id
+      });
+      return res.status(201).json({ movie });
+    }
+
     const uploadedFile = isExistingEmbed
       ? { embedurl: req.body.embedUrl }
       : isRemoteImport
@@ -128,6 +188,34 @@ const addMovie = async (req, res) => {
     res.status(err.status || 500).json({ message: err.message });
   } finally {
     if (tempFile) await fs.rm(tempFile, { force: true }).catch(() => {});
+  }
+};
+
+const refreshStreamtapeStatus = async (req, res) => {
+  try {
+    const movie = await Movie.findById(req.params.id);
+    if (!movie) return res.status(404).json({ message: 'Movie not found' });
+    if (!movie.streamtapeRemoteId) return res.status(400).json({ message: 'This movie has no pending Streamtape import.' });
+    const remoteResult = await streamtape.getRemoteStatus(movie.streamtapeRemoteId);
+    const remote = remoteResult?.[movie.streamtapeRemoteId] || Object.values(remoteResult || {})[0];
+    if (!remote) return res.status(404).json({ message: 'Streamtape could not find this import.' });
+    let fileId = remote.extid && typeof remote.extid === 'string' ? remote.extid : '';
+    if (!fileId && remote.url && typeof remote.url === 'string') fileId = getStreamtapeId(remote.url);
+    if (!fileId) {
+      const listing = await streamtape.listFolder(remote.folderid || '');
+      const match = (listing?.files || []).find((file) => file.name === movie.title || file.name.startsWith(movie.title));
+      fileId = match?.linkid || '';
+    }
+    movie.streamtapeStatus = remote.status || movie.streamtapeStatus;
+    if (fileId) {
+      movie.streamtapeFileId = fileId;
+      movie.videoUrl = `https://streamtape.com/e/${encodeURIComponent(fileId)}`;
+      movie.streamtapeStatus = 'Ready';
+    }
+    await movie.save();
+    res.json({ status: movie.streamtapeStatus, ready: Boolean(movie.videoUrl), embedUrl: movie.videoUrl });
+  } catch (err) {
+    res.status(err.status || 502).json({ message: err.message || 'Unable to check Streamtape import status.' });
   }
 };
 
@@ -217,4 +305,4 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = { listMovies, listMixDropFolders, addMovie, refreshMixDropStatus, updateMovie, deleteMovie, listUsers, getStats };
+module.exports = { listMovies, listMixDropFolders, listStreamtapeFolders, addMovie, refreshMixDropStatus, refreshStreamtapeStatus, updateMovie, deleteMovie, listUsers, getStats };

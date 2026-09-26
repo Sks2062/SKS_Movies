@@ -5,7 +5,9 @@ const {
   addMovie,
   listMovies,
   listMixDropFolders,
+  listStreamtapeFolders,
   refreshMixDropStatus,
+  refreshStreamtapeStatus,
   updateMovie,
   deleteMovie,
   listUsers,
@@ -37,8 +39,10 @@ router.use(protect, adminOnly);
 
 router.get('/movies', listMovies);
 router.get('/mixdrop/folders', listMixDropFolders);
+router.get('/streamtape/folders', listStreamtapeFolders);
 router.post('/movies', handleUpload, addMovie);
 router.post('/movies/:id/mixdrop-status', refreshMixDropStatus);
+router.post('/movies/:id/streamtape-status', refreshStreamtapeStatus);
 router.put('/movies/:id', updateMovie);
 router.delete('/movies/:id', deleteMovie);
 router.get('/users', listUsers);

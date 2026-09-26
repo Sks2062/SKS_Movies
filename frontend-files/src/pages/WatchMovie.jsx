@@ -28,7 +28,7 @@ export default function WatchMovie() {
       <div className="mt-6 aspect-video bg-elevated border border-line rounded-sm flex items-center justify-center">
         {playback?.embedUrl && (
           <iframe
-            title="MixDrop video player"
+            title={`${playback.provider === 'streamtape' ? 'Streamtape' : 'MixDrop'} video player`}
             src={playback.embedUrl}
             className="w-full h-full border-0"
             allow="autoplay; fullscreen; picture-in-picture"
@@ -37,15 +37,15 @@ export default function WatchMovie() {
           />
         )}
         {error && <p className="px-6 text-center text-red-400 text-sm">{error}</p>}
-        {!playback && !error && <p className="text-muted text-sm">Loading MixDrop player…</p>}
+        {!playback && !error && <p className="text-muted text-sm">Loading video player…</p>}
       </div>
       {playback?.embedUrl && (
         <p className="mt-3 text-sm text-muted">
           If the player stays blank,{' '}
           <a href={playback.embedUrl} target="_blank" rel="noreferrer" className="text-gold hover:underline">
-            open this video on MixDrop
+            open this video on {playback.provider === 'streamtape' ? 'Streamtape' : 'MixDrop'}
           </a>
-          . MixDrop may ask you to verify access there.
+          . The video host may ask you to verify access there.
         </p>
       )}
     </div>
