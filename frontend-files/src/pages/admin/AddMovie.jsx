@@ -11,6 +11,8 @@ const emptyForm = {
   cast: '',
   posterUrl: '',
   sourceMode: 'file',
+  sourceUrl: '',
+  embedUrl: '',
   downloadUrl: '',
   folder: '',
   allowStreaming: true,
@@ -58,10 +60,12 @@ export default function AddMovie() {
         allowStreaming: form.allowStreaming,
         allowDownload: form.allowDownload,
         folder: form.folder,
-        importMode: form.sourceMode === 'remote' ? 'remote' : 'file'
+        importMode: form.sourceMode
       };
       if (form.sourceMode === 'remote') {
         await api.post('/admin/movies', { ...movieData, sourceUrl: form.sourceUrl });
+      } else if (form.sourceMode === 'embed') {
+        await api.post('/admin/movies', { ...movieData, embedUrl: form.embedUrl });
       } else {
         const payload = new FormData();
         payload.append('file', videoFile);
@@ -81,13 +85,14 @@ export default function AddMovie() {
   return (
     <div className="max-w-2xl mx-auto px-6 py-14">
       <h1 className="font-display text-3xl">Add a movie</h1>
-      <p className="text-muted text-sm mt-2">Upload a video file or ask MixDrop to fetch a public video URL.</p>
+      <p className="text-muted text-sm mt-2">Upload a file, import a direct URL, or add an existing MixDrop player link.</p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
         <Field label="Video source">
           <select value={form.sourceMode} onChange={update('sourceMode')} className={inputClass}>
             <option value="file">Upload a video file</option>
             <option value="remote">Import from a direct URL</option>
+            <option value="embed">Use an existing MixDrop embed link</option>
           </select>
         </Field>
 
@@ -101,7 +106,7 @@ export default function AddMovie() {
               className={inputClass}
             />
           </Field>
-        ) : (
+        ) : form.sourceMode === 'remote' ? (
           <Field label="Public direct-download URL">
             <input
               type="url"
@@ -112,15 +117,26 @@ export default function AddMovie() {
               placeholder="https://files.example.com/video.mp4"
             />
           </Field>
+        ) : (
+          <Field label="MixDrop embed link">
+            <input
+              type="url"
+              required
+              value={form.embedUrl}
+              onChange={update('embedUrl')}
+              className={inputClass}
+              placeholder="https://mixdrop.top/e/FILE_ID"
+            />
+          </Field>
         )}
 
-        <Field label="MixDrop destination folder">
+        {form.sourceMode !== 'embed' && <Field label="MixDrop destination folder">
           <select value={form.folder} onChange={update('folder')} className={inputClass}>
             <option value="">Default folder</option>
             {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.title}</option>)}
           </select>
-        </Field>
-        {folderError && <p className="text-xs text-muted">{folderError}</p>}
+        </Field>}
+        {folderError && form.sourceMode !== 'embed' && <p className="text-xs text-muted">{folderError}</p>}
 
         <Field label="Title">
           <input required value={form.title} onChange={update('title')} className={inputClass} />
@@ -170,7 +186,9 @@ export default function AddMovie() {
         {error && <p className="text-sm text-red-400">{error}</p>}
 
         <button type="submit" disabled={saving || (form.sourceMode === 'file' && !videoFile)} className="bg-gold text-bg rounded-md px-6 py-2.5 text-sm font-medium hover:bg-goldDeep transition-colors disabled:opacity-60">
-          {saving ? 'Sending to MixDrop…' : form.sourceMode === 'remote' ? 'Import video and save movie' : 'Upload video and save movie'}
+          {saving
+            ? form.sourceMode === 'file' ? 'Uploading to MixDrop…' : form.sourceMode === 'remote' ? 'Queueing MixDrop import…' : 'Saving movie…'
+            : form.sourceMode === 'remote' ? 'Import video and save movie' : form.sourceMode === 'embed' ? 'Save movie with embed link' : 'Upload video and save movie'}
         </button>
       </form>
     </div>

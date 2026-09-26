@@ -1,6 +1,6 @@
 # Frame Movie Platform
 
-Frame is a movie catalog with an Express API, MongoDB storage, and a React/Vite client. MixDrop is the only video host used by the application. Admins can upload a local video through MixDrop's multipart API or have MixDrop fetch a public video URL through its remote-upload API. API credentials stay on the backend, and the watch page embeds MixDrop's returned player URL.
+Frame is a movie catalog with an Express API, MongoDB storage, and a React/Vite client. MixDrop is the only video host used by the application. Admins can upload a local video through MixDrop's multipart API, have MixDrop fetch a public video URL through its remote-upload API, or save an existing MixDrop embed link. API credentials stay on the backend, and the watch page embeds the MixDrop player URL.
 
 ## Configure MixDrop
 

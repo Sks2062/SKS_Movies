@@ -29,6 +29,13 @@ const getMixDropEmbedUrl = (value) => {
   }
 };
 
+const isUserProvidedMixDropEmbed = (value) => {
+  const embedUrl = getMixDropEmbedUrl(value);
+  if (!embedUrl) return false;
+  const hostname = new URL(embedUrl).hostname.toLowerCase().replace(/^www\./, '');
+  return /^mixdrop\.[a-z]{2,}$/.test(hostname);
+};
+
 const toList = (value) => {
   if (Array.isArray(value)) return value;
   if (typeof value !== 'string' || !value) return [];
@@ -70,22 +77,31 @@ const listMixDropFolders = async (req, res) => {
 const addMovie = async (req, res) => {
   let tempFile;
   try {
-    const isRemoteImport = req.body.importMode === 'remote';
+    const importMode = req.body.importMode || 'file';
+    const isRemoteImport = importMode === 'remote';
+    const isExistingEmbed = importMode === 'embed';
     tempFile = req.file?.path;
     if (isRemoteImport && !isHttpsUrl(req.body.sourceUrl)) {
       return res.status(400).json({ message: 'Use a public HTTPS direct-download URL for MixDrop remote upload.' });
     }
     if (!isRemoteImport && !isVideoFile(req.file)) {
-      return res.status(400).json({ message: 'Choose a supported video file to upload.' });
+      if (!isExistingEmbed) return res.status(400).json({ message: 'Choose a supported video file to upload.' });
+    }
+    if (isExistingEmbed && !isUserProvidedMixDropEmbed(req.body.embedUrl)) {
+      return res.status(400).json({ message: 'Paste a valid HTTPS MixDrop embed link, such as https://mixdrop.top/e/FILE_ID.' });
     }
     if (!req.body.title?.trim() || !req.body.description?.trim()) {
       return res.status(400).json({ message: 'Movie title and description are required.' });
     }
-    const uploadedFile = isRemoteImport
-      ? await remoteUploadVideo(req.body.sourceUrl, req.body.title, req.body.folder)
-      : await uploadVideoFile(req.file, req.body.folder);
-    const embedUrl = getMixDropEmbedUrl(uploadedFile?.embedurl);
-    if (isRemoteImport ? !uploadedFile?.id : (!uploadedFile?.fileref || !embedUrl)) {
+    const uploadedFile = isExistingEmbed
+      ? { embedurl: req.body.embedUrl }
+      : isRemoteImport
+        ? await remoteUploadVideo(req.body.sourceUrl, req.body.title, req.body.folder)
+        : await uploadVideoFile(req.file, req.body.folder);
+    const embedUrl = isExistingEmbed
+      ? getMixDropEmbedUrl(uploadedFile.embedurl)
+      : getMixDropEmbedUrl(uploadedFile?.embedurl);
+    if (isExistingEmbed ? !embedUrl : (isRemoteImport ? !uploadedFile?.id : (!uploadedFile?.fileref || !embedUrl))) {
       return res.status(502).json({ message: 'MixDrop did not return the expected upload reference.' });
     }
 
@@ -100,8 +116,8 @@ const addMovie = async (req, res) => {
       videoProvider: 'mixdrop',
       videoUrl: embedUrl,
       mixdropRemoteId: isRemoteImport ? String(uploadedFile.id) : '',
-      mixdropFileRef: uploadedFile.fileref ? String(uploadedFile.fileref) : '',
-      mixdropStatus: isRemoteImport ? (uploadedFile.fileref ? 'Processing' : 'Queued') : 'Uploaded',
+      mixdropFileRef: !isExistingEmbed && uploadedFile.fileref ? String(uploadedFile.fileref) : '',
+      mixdropStatus: isExistingEmbed ? 'Ready' : (isRemoteImport ? (uploadedFile.fileref ? 'Processing' : 'Queued') : 'Uploaded'),
       downloadUrl: req.body.downloadUrl || '',
       allowStreaming: req.body.allowStreaming !== 'false',
       allowDownload: req.body.allowDownload === 'true',
