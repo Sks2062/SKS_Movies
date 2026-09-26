@@ -43,6 +43,30 @@ const getStreamtapeEmbedUrl = (value) => {
 
 const getStreamtapeId = (value) => getStreamtapeEmbedUrl(value).match(/\/e\/([^/]+)/)?.[1] || '';
 
+const getStreamtapeFileId = (value) => {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (url.protocol !== 'https:' || !/(^|\.)streamtape\.com$/.test(host)) return '';
+    return url.pathname.match(/^\/(?:e|v)\/([a-z0-9_-]+)(?:\/[^/]*)?\/?$/i)?.[1] || '';
+  } catch { return ''; }
+};
+
+const getDailymotionEmbedUrl = (value) => {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (url.protocol !== 'https:' || !['dai.ly', 'dailymotion.com', 'geo.dailymotion.com'].includes(host)) return '';
+    const id = host === 'dai.ly'
+      ? url.pathname.match(/^\/([a-z0-9_-]+)\/?$/i)?.[1]
+      : url.pathname.match(/^\/(?:video|embed\/video)\/([a-z0-9_-]+)(?:_[^/]*)?\/?$/i)?.[1]
+        || (host === 'geo.dailymotion.com' && url.pathname.match(/^\/player(?:\/[^/]+)?\.html$/i) ? url.searchParams.get('video') : '');
+    return id && /^[a-z0-9_-]+$/i.test(id)
+      ? `https://geo.dailymotion.com/player.html?video=${encodeURIComponent(id)}`
+      : '';
+  } catch { return ''; }
+};
+
 const isUserProvidedMixDropEmbed = (value) => {
   const embedUrl = getMixDropEmbedUrl(value);
   if (!embedUrl) return false;
@@ -100,7 +124,9 @@ const listStreamtapeFolders = async (req, res) => {
 const addMovie = async (req, res) => {
   let tempFile;
   try {
-    const provider = req.body.videoProvider === 'streamtape' ? 'streamtape' : 'mixdrop';
+    const provider = ['mixdrop', 'streamtape', 'dailymotion'].includes(req.body.videoProvider)
+      ? req.body.videoProvider
+      : 'mixdrop';
     const importMode = req.body.importMode || 'file';
     const isRemoteImport = importMode === 'remote';
     const isExistingEmbed = importMode === 'embed';
@@ -111,14 +137,50 @@ const addMovie = async (req, res) => {
     if (!isRemoteImport && !isVideoFile(req.file)) {
       if (!isExistingEmbed) return res.status(400).json({ message: 'Choose a supported video file to upload.' });
     }
-    if (isExistingEmbed && !(provider === 'streamtape' ? getStreamtapeEmbedUrl(req.body.embedUrl) : isUserProvidedMixDropEmbed(req.body.embedUrl))) {
+    const validEmbed = provider === 'streamtape'
+      ? getStreamtapeEmbedUrl(req.body.embedUrl)
+      : provider === 'dailymotion'
+        ? getDailymotionEmbedUrl(req.body.embedUrl)
+        : isUserProvidedMixDropEmbed(req.body.embedUrl);
+    if (isExistingEmbed && !validEmbed) {
       return res.status(400).json({ message: provider === 'streamtape'
         ? 'Paste a valid HTTPS Streamtape player link, such as https://streamtape.com/e/FILE_ID.'
-        : 'Paste a valid HTTPS MixDrop embed link, such as https://mixdrop.top/e/FILE_ID.' });
+        : provider === 'dailymotion'
+          ? 'Paste a valid Dailymotion video link, such as https://dai.ly/VIDEO_ID.'
+          : 'Paste a valid HTTPS MixDrop embed link, such as https://mixdrop.top/e/FILE_ID.' });
     }
     if (!req.body.title?.trim() || !req.body.description?.trim()) {
       return res.status(400).json({ message: 'Movie title and description are required.' });
     }
+    if (provider === 'dailymotion') {
+      if (!isExistingEmbed) return res.status(400).json({ message: 'For Dailymotion, choose “Use an existing player link”.' });
+      const streamtapeFileId = getStreamtapeFileId(req.body.streamtapeDownloadUrl);
+      if (req.body.streamtapeDownloadUrl && !streamtapeFileId) {
+        return res.status(400).json({ message: 'Paste a valid Streamtape /e/ or /v/ link for downloads.' });
+      }
+      if (req.body.allowDownload === 'true' && !streamtapeFileId && !req.body.downloadUrl) {
+        return res.status(400).json({ message: 'Add a Streamtape download link before enabling downloads.' });
+      }
+      const movie = await Movie.create({
+        title: req.body.title,
+        description: req.body.description,
+        genre: toList(req.body.genre),
+        releaseYear: Number(req.body.releaseYear),
+        duration: req.body.duration ? Number(req.body.duration) : undefined,
+        cast: toList(req.body.cast),
+        posterUrl: req.body.posterUrl,
+        videoProvider: 'dailymotion',
+        videoUrl: getDailymotionEmbedUrl(req.body.embedUrl),
+        streamtapeFileId,
+        streamtapeStatus: streamtapeFileId ? 'Ready' : '',
+        downloadUrl: req.body.downloadUrl || '',
+        allowStreaming: req.body.allowStreaming !== 'false',
+        allowDownload: req.body.allowDownload === 'true',
+        uploadedBy: req.user._id
+      });
+      return res.status(201).json({ movie });
+    }
+
     if (provider === 'streamtape') {
       const uploaded = isExistingEmbed
         ? { fileId: getStreamtapeId(req.body.embedUrl), status: 'Ready' }
@@ -248,8 +310,25 @@ const refreshMixDropStatus = async (req, res) => {
 const updateMovie = async (req, res) => {
   try {
     const updates = { ...req.body };
+    let dailymotionEmbedUrl = '';
+    if (Object.hasOwn(updates, 'dailymotionUrl')) {
+      dailymotionEmbedUrl = getDailymotionEmbedUrl(updates.dailymotionUrl);
+      if (!dailymotionEmbedUrl) return res.status(400).json({ message: 'Paste a valid Dailymotion video link, such as https://dai.ly/VIDEO_ID.' });
+      delete updates.dailymotionUrl;
+    }
     delete updates.videoProvider;
     delete updates.videoUrl;
+    if (dailymotionEmbedUrl) {
+      updates.videoProvider = 'dailymotion';
+      updates.videoUrl = dailymotionEmbedUrl;
+    }
+    if (Object.hasOwn(updates, 'streamtapeDownloadUrl')) {
+      const fileId = getStreamtapeFileId(updates.streamtapeDownloadUrl);
+      if (updates.streamtapeDownloadUrl && !fileId) return res.status(400).json({ message: 'Paste a valid Streamtape /e/ or /v/ link.' });
+      updates.streamtapeFileId = fileId;
+      updates.streamtapeStatus = fileId ? 'Ready' : '';
+      delete updates.streamtapeDownloadUrl;
+    }
     const movie = await Movie.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true

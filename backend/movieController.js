@@ -1,5 +1,6 @@
 const Movie = require('./Movie');
 const User = require('./User');
+const streamtape = require('./streamtapeClient');
 
 // @route GET /api/movies?search=&genre=
 const listMovies = async (req, res) => {
@@ -36,11 +37,12 @@ const streamMovie = async (req, res) => {
     if (!movie.allowStreaming) {
       return res.status(403).json({ message: 'Streaming is not enabled for this title' });
     }
-    if (!['mixdrop', 'streamtape'].includes(movie.videoProvider)) {
+    if (!['mixdrop', 'streamtape', 'dailymotion'].includes(movie.videoProvider)) {
       return res.status(410).json({ message: 'This movie uses a retired video provider. Re-import it through a supported host.' });
     }
     if (!movie.videoUrl) {
-      return res.status(409).json({ message: `${movie.videoProvider === 'streamtape' ? 'Streamtape' : 'MixDrop'} is still importing this video. Ask an admin to refresh its status.` });
+      const providerName = movie.videoProvider === 'streamtape' ? 'Streamtape' : movie.videoProvider === 'dailymotion' ? 'Dailymotion' : 'MixDrop';
+      return res.status(409).json({ message: `${providerName} has no playable video link saved for this title.` });
     }
 
     movie.views += 1;
@@ -64,16 +66,20 @@ const downloadMovie = async (req, res) => {
     if (!movie.allowDownload) {
       return res.status(403).json({ message: 'Downloads are not enabled for this title' });
     }
-    if (!movie.downloadUrl) {
+    if (!movie.downloadUrl && !movie.streamtapeFileId) {
       return res.status(404).json({ message: 'No download link is configured for this title' });
     }
+
+    const downloadUrl = movie.streamtapeFileId
+      ? await streamtape.getDownloadUrl(movie.streamtapeFileId)
+      : movie.downloadUrl;
 
     movie.downloads += 1;
     await movie.save();
 
-    res.json({ downloadUrl: movie.downloadUrl, expiresInSeconds: 900 });
+    res.json({ downloadUrl, expiresInSeconds: 900 });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 502).json({ message: err.message });
   }
 };
 

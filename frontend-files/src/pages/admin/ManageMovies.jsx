@@ -29,6 +29,11 @@ export default function ManageMovies() {
     load();
   };
 
+  const saveVideoLinks = async (movie, links) => {
+    await api.put(`/admin/movies/${movie._id}`, links);
+    load();
+  };
+
   const refreshMixDropStatus = async (movie) => {
     try {
       await api.post(`/admin/movies/${movie._id}/mixdrop-status`);
@@ -70,8 +75,11 @@ export default function ManageMovies() {
               <p className="mt-1 text-xs text-gold">
                 {movie.videoProvider === 'streamtape'
                   ? `Streamtape ${movie.videoUrl ? 'player ready' : 'import'} · ${movie.streamtapeStatus || 'processing'}`
-                  : `MixDrop ${movie.videoUrl ? 'embed created' : 'import'} · ${movie.mixdropStatus || 'queued'}`}
+                  : movie.videoProvider === 'dailymotion'
+                    ? 'Dailymotion player ready'
+                    : `MixDrop ${movie.videoUrl ? 'embed created' : 'import'} · ${movie.mixdropStatus || 'queued'}`}
               </p>
+              <VideoLinksEditor movie={movie} onSave={saveVideoLinks} />
             </div>
 
             <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -137,6 +145,46 @@ function DownloadUrlEditor({ movie, onSave }) {
         className="min-w-0 flex-1 rounded-md border border-line bg-elevated px-3 py-1.5 text-xs md:w-52"
       />
       <button type="submit" className="text-gold hover:underline">Save link</button>
+    </form>
+  );
+}
+
+function VideoLinksEditor({ movie, onSave }) {
+  const [dailymotionUrl, setDailymotionUrl] = useState(movie.videoProvider === 'dailymotion' ? movie.videoUrl : '');
+  const [streamtapeDownloadUrl, setStreamtapeDownloadUrl] = useState(movie.streamtapeFileId ? `https://streamtape.com/v/${movie.streamtapeFileId}` : '');
+
+  useEffect(() => {
+    setDailymotionUrl(movie.videoProvider === 'dailymotion' ? movie.videoUrl : '');
+    setStreamtapeDownloadUrl(movie.streamtapeFileId ? `https://streamtape.com/v/${movie.streamtapeFileId}` : '');
+  }, [movie.videoProvider, movie.videoUrl, movie.streamtapeFileId]);
+
+  return (
+    <form
+      className="grid w-full gap-2 md:max-w-xl md:grid-cols-[1fr_1fr_auto]"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const links = { streamtapeDownloadUrl };
+        if (dailymotionUrl.trim()) links.dailymotionUrl = dailymotionUrl;
+        onSave(movie, links);
+      }}
+    >
+      <input
+        type="url"
+        value={dailymotionUrl}
+        onChange={(event) => setDailymotionUrl(event.target.value)}
+        placeholder="Dailymotion URL to switch playback"
+        aria-label={`Dailymotion playback URL for ${movie.title}`}
+        className="min-w-0 rounded-md border border-line bg-elevated px-3 py-1.5 text-xs"
+      />
+      <input
+        type="url"
+        value={streamtapeDownloadUrl}
+        onChange={(event) => setStreamtapeDownloadUrl(event.target.value)}
+        placeholder="Streamtape download link"
+        aria-label={`Streamtape download link for ${movie.title}`}
+        className="min-w-0 rounded-md border border-line bg-elevated px-3 py-1.5 text-xs"
+      />
+      <button type="submit" className="text-gold hover:underline">Save video links</button>
     </form>
   );
 }

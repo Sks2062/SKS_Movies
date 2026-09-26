@@ -16,10 +16,13 @@ export default function MovieDetails() {
 
   const handleDownload = async () => {
     if (!user) return navigate('/login');
+    const downloadTab = window.open('about:blank', '_blank');
     try {
       const res = await api.get(`/movies/${id}/download`);
-      window.open(res.data.downloadUrl, '_blank');
+      if (downloadTab) downloadTab.location.href = res.data.downloadUrl;
+      else window.location.href = res.data.downloadUrl;
     } catch (err) {
+      downloadTab?.close();
       setMessage(err.response?.data?.message || 'Download unavailable');
     }
   };

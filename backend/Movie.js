@@ -6,7 +6,7 @@ const movieSchema = new mongoose.Schema(
     description: { type: String, required: true },
     posterUrl: { type: String, default: '' },
     videoUrl: { type: String, default: '' }, // Provider player embed URL.
-    videoProvider: { type: String, enum: ['mixdrop', 'streamtape'], default: 'mixdrop' },
+    videoProvider: { type: String, enum: ['mixdrop', 'streamtape', 'dailymotion'], default: 'mixdrop' },
     mixdropRemoteId: { type: String, default: '' },
     mixdropFileRef: { type: String, default: '' },
     mixdropStatus: { type: String, default: 'queued' },

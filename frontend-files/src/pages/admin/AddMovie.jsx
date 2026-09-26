@@ -14,6 +14,7 @@ const emptyForm = {
   videoProvider: 'mixdrop',
   sourceUrl: '',
   embedUrl: '',
+  streamtapeDownloadUrl: '',
   downloadUrl: '',
   folder: '',
   allowStreaming: true,
@@ -33,6 +34,7 @@ export default function AddMovie() {
     setFolders([]);
     setFolderError('');
     setForm((current) => ({ ...current, folder: '' }));
+    if (form.videoProvider === 'dailymotion') return;
     api.get(`/admin/${form.videoProvider}/folders`)
       .then(({ data }) => {
         setFolders(data);
@@ -45,6 +47,16 @@ export default function AddMovie() {
   const update = (field) => (event) => {
     const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
     setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const changeVideoProvider = (event) => {
+    const videoProvider = event.target.value;
+    setForm((current) => ({
+      ...current,
+      videoProvider,
+      sourceMode: videoProvider === 'dailymotion' ? 'embed' : (current.videoProvider === 'dailymotion' ? 'file' : current.sourceMode),
+      folder: ''
+    }));
   };
 
   const onSubmit = async (event) => {
@@ -61,6 +73,7 @@ export default function AddMovie() {
         cast: form.cast.split(',').map((item) => item.trim()).filter(Boolean),
         posterUrl: form.posterUrl,
         downloadUrl: form.downloadUrl,
+        streamtapeDownloadUrl: form.streamtapeDownloadUrl,
         allowStreaming: form.allowStreaming,
         allowDownload: form.allowDownload,
         folder: form.folder,
@@ -81,7 +94,8 @@ export default function AddMovie() {
       }
       navigate('/admin/movies');
     } catch (err) {
-      setError(err.response?.data?.message || `Unable to send this video to ${form.videoProvider === 'streamtape' ? 'Streamtape' : 'MixDrop'}.`);
+      const host = form.videoProvider === 'streamtape' ? 'Streamtape' : form.videoProvider === 'dailymotion' ? 'Dailymotion' : 'MixDrop';
+      setError(err.response?.data?.message || `Unable to save this video from ${host}.`);
     } finally {
       setSaving(false);
     }
@@ -94,18 +108,19 @@ export default function AddMovie() {
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
         <Field label="Video host">
-          <select value={form.videoProvider} onChange={update('videoProvider')} className={inputClass}>
+          <select value={form.videoProvider} onChange={changeVideoProvider} className={inputClass}>
             <option value="mixdrop">MixDrop</option>
             <option value="streamtape">Streamtape</option>
+            <option value="dailymotion">Dailymotion player + Streamtape download</option>
           </select>
         </Field>
-        <Field label="Video source">
+        {form.videoProvider !== 'dailymotion' && <Field label="Video source">
           <select value={form.sourceMode} onChange={update('sourceMode')} className={inputClass}>
             <option value="file">Upload a video file</option>
             <option value="remote">Import from a direct URL</option>
             <option value="embed">Use an existing player link</option>
           </select>
-        </Field>
+        </Field>}
 
         {form.sourceMode === 'file' ? (
           <Field label="Video file (maximum 5 GB)">
@@ -129,25 +144,25 @@ export default function AddMovie() {
             />
           </Field>
         ) : (
-          <Field label={`${form.videoProvider === 'streamtape' ? 'Streamtape' : 'MixDrop'} player link`}>
+          <Field label={`${form.videoProvider === 'streamtape' ? 'Streamtape' : form.videoProvider === 'dailymotion' ? 'Dailymotion video link' : 'MixDrop player link'}`}>
             <input
               type="url"
               required
               value={form.embedUrl}
               onChange={update('embedUrl')}
               className={inputClass}
-              placeholder={form.videoProvider === 'streamtape' ? 'https://streamtape.com/e/FILE_ID' : 'https://mixdrop.top/e/FILE_ID'}
+              placeholder={form.videoProvider === 'streamtape' ? 'https://streamtape.com/e/FILE_ID' : form.videoProvider === 'dailymotion' ? 'https://dai.ly/VIDEO_ID' : 'https://mixdrop.top/e/FILE_ID'}
             />
           </Field>
         )}
 
-        {form.sourceMode !== 'embed' && <Field label={`${form.videoProvider === 'streamtape' ? 'Streamtape' : 'MixDrop'} destination folder`}>
+        {form.videoProvider !== 'dailymotion' && form.sourceMode !== 'embed' && <Field label={`${form.videoProvider === 'streamtape' ? 'Streamtape' : 'MixDrop'} destination folder`}>
           <select value={form.folder} onChange={update('folder')} className={inputClass}>
             <option value="">Default folder</option>
             {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.title}</option>)}
           </select>
         </Field>}
-        {folderError && form.sourceMode !== 'embed' && <p className="text-xs text-muted">{folderError}</p>}
+        {folderError && form.videoProvider !== 'dailymotion' && form.sourceMode !== 'embed' && <p className="text-xs text-muted">{folderError}</p>}
 
         <Field label="Title">
           <input required value={form.title} onChange={update('title')} className={inputClass} />
@@ -179,9 +194,16 @@ export default function AddMovie() {
           <input value={form.posterUrl} onChange={update('posterUrl')} className={inputClass} placeholder="Leave blank if you don't have one" />
         </Field>
 
-        <Field label="Download URL (optional)">
-          <input type="url" value={form.downloadUrl} onChange={update('downloadUrl')} className={inputClass} placeholder="https://..." />
-        </Field>
+        {form.videoProvider === 'dailymotion' ? (
+          <Field label="Streamtape download link">
+            <input type="url" value={form.streamtapeDownloadUrl} onChange={update('streamtapeDownloadUrl')} className={inputClass} placeholder="https://streamtape.com/v/FILE_ID/name.mp4" />
+            <p className="mt-1 text-xs text-muted">The server uses your Streamtape API credentials to create a download ticket.</p>
+          </Field>
+        ) : (
+          <Field label="Download URL (optional)">
+            <input type="url" value={form.downloadUrl} onChange={update('downloadUrl')} className={inputClass} placeholder="https://..." />
+          </Field>
+        )}
 
         <div className="flex gap-6 pt-2">
           <label className="flex items-center gap-2 text-sm">
@@ -199,7 +221,7 @@ export default function AddMovie() {
         <button type="submit" disabled={saving || (form.sourceMode === 'file' && !videoFile)} className="bg-gold text-bg rounded-md px-6 py-2.5 text-sm font-medium hover:bg-goldDeep transition-colors disabled:opacity-60">
           {saving
             ? form.sourceMode === 'file' ? `Uploading to ${form.videoProvider === 'streamtape' ? 'Streamtape' : 'MixDrop'}…` : form.sourceMode === 'remote' ? `Queueing ${form.videoProvider === 'streamtape' ? 'Streamtape' : 'MixDrop'} import…` : 'Saving movie…'
-            : form.sourceMode === 'remote' ? 'Import video and save movie' : form.sourceMode === 'embed' ? 'Save movie with embed link' : 'Upload video and save movie'}
+            : form.videoProvider === 'dailymotion' ? 'Save Dailymotion movie' : form.sourceMode === 'remote' ? 'Import video and save movie' : form.sourceMode === 'embed' ? 'Save movie with embed link' : 'Upload video and save movie'}
         </button>
       </form>
     </div>

@@ -76,4 +76,17 @@ const getRemoteStatus = (id) => request('/remotedl/status', { id });
 const listFolder = (folder) => request('/file/listfolder', { folder });
 const getFolders = async () => (await listFolder()).folders || [];
 
-module.exports = { uploadVideoFile, remoteUploadVideo, getRemoteStatus, listFolder, getFolders };
+const getDownloadUrl = async (fileId) => {
+  const ticket = await request('/file/dlticket', { file: fileId });
+  if (!ticket?.ticket) throw Object.assign(new Error('Streamtape did not return a download ticket.'), { status: 502 });
+  const url = new URL('https://api.streamtape.com/file/dl');
+  url.searchParams.set('file', fileId);
+  url.searchParams.set('ticket', ticket.ticket);
+  const result = await parse(await fetch(url, { signal: AbortSignal.timeout(30000) }));
+  if (!result?.url || !/^https:\/\//i.test(result.url)) {
+    throw Object.assign(new Error('Streamtape did not return a downloadable file URL.'), { status: 502 });
+  }
+  return result.url;
+};
+
+module.exports = { uploadVideoFile, remoteUploadVideo, getRemoteStatus, listFolder, getFolders, getDownloadUrl };

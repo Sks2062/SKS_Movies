@@ -28,10 +28,10 @@ export default function WatchMovie() {
       <div className="mt-6 aspect-video bg-elevated border border-line rounded-sm flex items-center justify-center">
         {playback?.embedUrl && (
           <iframe
-            title={`${playback.provider === 'streamtape' ? 'Streamtape' : 'MixDrop'} video player`}
+            title={`${playback.provider === 'streamtape' ? 'Streamtape' : playback.provider === 'dailymotion' ? 'Dailymotion' : 'MixDrop'} video player`}
             src={playback.embedUrl}
             className="w-full h-full border-0"
-            allow="autoplay; fullscreen; picture-in-picture"
+            allow="autoplay; fullscreen; picture-in-picture; web-share"
             allowFullScreen
             referrerPolicy="strict-origin-when-cross-origin"
           />
@@ -43,7 +43,7 @@ export default function WatchMovie() {
         <p className="mt-3 text-sm text-muted">
           If the player stays blank,{' '}
           <a href={playback.embedUrl} target="_blank" rel="noreferrer" className="text-gold hover:underline">
-            open this video on {playback.provider === 'streamtape' ? 'Streamtape' : 'MixDrop'}
+            open this video on {playback.provider === 'streamtape' ? 'Streamtape' : playback.provider === 'dailymotion' ? 'Dailymotion' : 'MixDrop'}
           </a>
           . The video host may ask you to verify access there.
         </p>
