@@ -1,19 +1,24 @@
 const Movie = require('./Movie');
 const User = require('./User');
-const { getMuxClient } = require('./muxClient');
+const { queueRemoteUpload, getRemoteStatus, getFileInfo } = require('./mixdropClient');
 
-const isTeraBoxShareUrl = (value) => {
+const isHttpsUrl = (value) => {
   try {
     const url = new URL(value);
-    const hosts = new Set([
-      'terabox.com', 'www.terabox.com', 'terabox.app', 'www.terabox.app',
-      'dm.terabox.com',
-      '1024terabox.com', 'www.1024terabox.com', 'freeterabox.com', 'www.freeterabox.com',
-      'terasharelink.com', 'www.terasharelink.com'
-    ]);
-    return url.protocol === 'https:' && hosts.has(url.hostname.toLowerCase());
+    return url.protocol === 'https:' && Boolean(url.hostname);
   } catch {
     return false;
+  }
+};
+
+const getMixDropEmbedUrl = (value) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && /^\/e\/[a-z0-9_-]+\/?$/i.test(url.pathname)
+      ? url.href
+      : '';
+  } catch {
+    return '';
   }
 };
 
@@ -29,10 +34,17 @@ const listMovies = async (req, res) => {
 
 // @route POST /api/admin/movies
 const addMovie = async (req, res) => {
-  let movie;
   try {
-    const videoProvider = req.body.videoProvider === 'terabox' ? 'terabox' : 'mux';
-    const movieData = {
+    if (!isHttpsUrl(req.body.sourceUrl)) {
+      return res.status(400).json({ message: 'Use an HTTPS direct-download URL for the video file.' });
+    }
+
+    const remoteUpload = await queueRemoteUpload(req.body.sourceUrl, req.body.title);
+    if (!remoteUpload?.id) {
+      return res.status(502).json({ message: 'MixDrop did not return an import ID.' });
+    }
+    const embedUrl = getMixDropEmbedUrl(remoteUpload.embedurl);
+    const movie = await Movie.create({
       title: req.body.title,
       description: req.body.description,
       genre: req.body.genre,
@@ -40,45 +52,44 @@ const addMovie = async (req, res) => {
       duration: req.body.duration,
       cast: req.body.cast,
       posterUrl: req.body.posterUrl,
-      videoProvider,
-      videoUrl: videoProvider === 'terabox' ? req.body.videoUrl : '',
+      videoProvider: 'mixdrop',
+      videoUrl: embedUrl,
+      mixdropRemoteId: String(remoteUpload.id),
+      mixdropFileRef: remoteUpload.fileref || '',
+      mixdropStatus: remoteUpload.fileref ? 'processing' : 'queued',
       downloadUrl: req.body.downloadUrl || '',
       allowStreaming: req.body.allowStreaming,
       allowDownload: req.body.allowDownload,
-      muxStatus: videoProvider === 'terabox' ? 'ready' : 'pending_upload',
       uploadedBy: req.user._id
-    };
-
-    if (videoProvider === 'terabox') {
-      if (!isTeraBoxShareUrl(req.body.videoUrl)) {
-        return res.status(400).json({ message: 'Use an HTTPS TeraBox share URL' });
-      }
-
-      movie = await Movie.create(movieData);
-      return res.status(201).json({ movie });
-    }
-
-    const mux = getMuxClient();
-    movie = await Movie.create(movieData);
-    const upload = await mux.video.uploads.create({
-      cors_origin: req.get('origin') || process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL || 'http://localhost:5173',
-      timeout: 3600,
-      new_asset_settings: {
-        playback_policies: ['signed'],
-        video_quality: 'basic',
-        passthrough: movie._id.toString()
-      }
     });
-
-    movie.muxUploadId = upload.id;
-    await movie.save();
-    res.status(201).json({ movie, uploadUrl: upload.url });
+    res.status(201).json({ movie });
   } catch (err) {
-    if (movie && !movie.muxUploadId) await Movie.findByIdAndDelete(movie._id);
-    if (err.message.includes('Mux is not configured')) {
-      return res.status(503).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
+  }
+};
+
+// @route POST /api/admin/movies/:id/mixdrop-status
+const refreshMixDropStatus = async (req, res) => {
+  try {
+    const movie = await Movie.findById(req.params.id);
+    if (!movie) return res.status(404).json({ message: 'Movie not found' });
+    if (!movie.mixdropRemoteId) return res.status(400).json({ message: 'This movie has no MixDrop import to check.' });
+
+    const result = await getRemoteStatus(movie.mixdropRemoteId);
+    movie.mixdropStatus = result.status || movie.mixdropStatus;
+    if (result.fileref) movie.mixdropFileRef = result.fileref;
+    if (!getMixDropEmbedUrl(movie.videoUrl) && movie.mixdropFileRef) {
+      const fileInfo = await getFileInfo(movie.mixdropFileRef);
+      movie.videoUrl = getMixDropEmbedUrl(result.embedurl || fileInfo?.embedurl);
     }
-    res.status(500).json({ message: err.message });
+    await movie.save();
+    res.json({
+      status: movie.mixdropStatus,
+      ready: Boolean(movie.videoUrl),
+      embedUrl: movie.videoUrl
+    });
+  } catch (err) {
+    res.status(err.status || 502).json({ message: err.message || 'Unable to check MixDrop import status.' });
   }
 };
 
@@ -86,12 +97,8 @@ const addMovie = async (req, res) => {
 const updateMovie = async (req, res) => {
   try {
     const updates = { ...req.body };
-    if (updates.videoProvider === 'terabox' || updates.videoUrl) {
-      if (!isTeraBoxShareUrl(updates.videoUrl)) {
-        return res.status(400).json({ message: 'Use an HTTPS TeraBox share URL' });
-      }
-      updates.videoProvider = 'terabox';
-    }
+    delete updates.videoProvider;
+    delete updates.videoUrl;
     const movie = await Movie.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true
@@ -108,9 +115,6 @@ const deleteMovie = async (req, res) => {
   try {
     const movie = await Movie.findById(req.params.id);
     if (!movie) return res.status(404).json({ message: 'Movie not found' });
-    if (movie.muxAssetId) {
-      await getMuxClient().video.assets.delete(movie.muxAssetId);
-    }
     await Movie.findByIdAndDelete(movie._id);
     res.json({ message: 'Movie deleted' });
   } catch (err) {
@@ -150,4 +154,4 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = { listMovies, addMovie, updateMovie, deleteMovie, listUsers, getStats };
+module.exports = { listMovies, addMovie, refreshMixDropStatus, updateMovie, deleteMovie, listUsers, getStats };

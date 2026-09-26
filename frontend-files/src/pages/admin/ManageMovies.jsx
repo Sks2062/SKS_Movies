@@ -29,9 +29,13 @@ export default function ManageMovies() {
     load();
   };
 
-  const saveVideoUrl = async (movie, videoUrl) => {
-    await api.put(`/admin/movies/${movie._id}`, { videoUrl, videoProvider: 'terabox' });
-    load();
+  const refreshMixDropStatus = async (movie) => {
+    try {
+      await api.post(`/admin/movies/${movie._id}/mixdrop-status`);
+      await load();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Could not refresh MixDrop status.');
+    }
   };
 
   return (
@@ -54,12 +58,9 @@ export default function ManageMovies() {
               <p className="text-muted text-sm">
                 {movie.releaseYear} · {movie.views} views · {movie.downloads} downloads
               </p>
-              {movie.muxStatus && movie.muxStatus !== 'ready' && (
-                <p className="mt-1 text-xs text-gold">
-                  {movie.muxStatus === 'pending_upload' ? 'Waiting for video upload' :
-                    movie.muxStatus === 'processing' ? 'Mux is processing video' : 'Mux video processing failed'}
-                </p>
-              )}
+              <p className="mt-1 text-xs text-gold">
+                {movie.videoUrl ? `MixDrop embed created · ${movie.mixdropStatus || 'processing'}` : `MixDrop import: ${movie.mixdropStatus || 'queued'}`}
+              </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -80,7 +81,11 @@ export default function ManageMovies() {
                 Download
               </label>
               <DownloadUrlEditor movie={movie} onSave={saveDownloadUrl} />
-              {movie.videoProvider === 'terabox' && <TeraBoxUrlEditor movie={movie} onSave={saveVideoUrl} />}
+              {movie.mixdropRemoteId && (
+                <button onClick={() => refreshMixDropStatus(movie)} className="text-gold hover:underline">
+                  Refresh MixDrop status
+                </button>
+              )}
               <button onClick={() => remove(movie._id)} className="text-red-400 hover:underline">
                 Delete
               </button>
@@ -91,33 +96,6 @@ export default function ManageMovies() {
         {movies.length === 0 && <p className="text-muted py-6">No movies yet.</p>}
       </div>
     </div>
-  );
-}
-
-function TeraBoxUrlEditor({ movie, onSave }) {
-  const [url, setUrl] = useState(movie.videoUrl || '');
-
-  useEffect(() => setUrl(movie.videoUrl || ''), [movie.videoUrl]);
-
-  return (
-    <form
-      className="flex w-full gap-2 md:w-auto"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSave(movie, url);
-      }}
-    >
-      <input
-        type="url"
-        required
-        value={url}
-        onChange={(event) => setUrl(event.target.value)}
-        placeholder="TeraBox video link"
-        aria-label={`TeraBox video link for ${movie.title}`}
-        className="min-w-0 flex-1 rounded-md border border-line bg-elevated px-3 py-1.5 text-xs md:w-52"
-      />
-      <button type="submit" className="text-gold hover:underline">Save video</button>
-    </form>
   );
 }
 

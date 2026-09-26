@@ -22,13 +22,7 @@ services:
         value: shrawan.sks2062@gmail.com
       - key: ADMIN_PASSWORD
         sync: false
-      - key: MUX_TOKEN_ID
+      - key: MIXDROP_API_EMAIL
         sync: false
-      - key: MUX_TOKEN_SECRET
-        sync: false
-      - key: MUX_SIGNING_KEY
-        sync: false
-      - key: MUX_PRIVATE_KEY
-        sync: false
-      - key: MUX_WEBHOOK_SECRET
+      - key: MIXDROP_API_KEY
         sync: false

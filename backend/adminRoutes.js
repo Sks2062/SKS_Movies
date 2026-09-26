@@ -2,6 +2,7 @@ const express = require('express');
 const {
   addMovie,
   listMovies,
+  refreshMixDropStatus,
   updateMovie,
   deleteMovie,
   listUsers,
@@ -16,6 +17,7 @@ router.use(protect, adminOnly);
 
 router.get('/movies', listMovies);
 router.post('/movies', addMovie);
+router.post('/movies/:id/mixdrop-status', refreshMixDropStatus);
 router.put('/movies/:id', updateMovie);
 router.delete('/movies/:id', deleteMovie);
 router.get('/users', listUsers);

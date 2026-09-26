@@ -5,16 +5,11 @@ const movieSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
     posterUrl: { type: String, default: '' },
-    videoUrl: { type: String, default: '' }, // Legacy external URL; new uploads use Mux.
-    videoProvider: { type: String, enum: ['', 'mux', 'terabox'], default: '' },
-    muxAssetId: { type: String, default: '' },
-    muxUploadId: { type: String, default: '' },
-    muxPlaybackId: { type: String, default: '' },
-    muxStatus: {
-      type: String,
-      enum: ['pending_upload', 'processing', 'ready', 'error'],
-      default: 'ready'
-    },
+    videoUrl: { type: String, default: '' }, // MixDrop player embed URL.
+    videoProvider: { type: String, enum: ['mixdrop'], default: 'mixdrop' },
+    mixdropRemoteId: { type: String, default: '' },
+    mixdropFileRef: { type: String, default: '' },
+    mixdropStatus: { type: String, default: 'queued' },
     downloadUrl: { type: String, trim: true, default: '' },
     genre: [{ type: String }],
     releaseYear: { type: Number, required: true },

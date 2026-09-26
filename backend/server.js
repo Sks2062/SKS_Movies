@@ -6,13 +6,11 @@ const connectDB = require('./db');
 const authRoutes = require('./authRoutes');
 const movieRoutes = require('./movieRoutes');
 const adminRoutes = require('./adminRoutes');
-const { muxWebhook } = require('./muxWebhookController');
 
 connectDB();
 
 const app = express();
 
-app.post('/api/webhooks/mux', express.raw({ type: 'application/json' }), muxWebhook);
 app.use(express.json());
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
