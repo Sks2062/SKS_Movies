@@ -1,14 +1,14 @@
 # Frame Movie Platform
 
-Frame is a movie catalog with an Express API, MongoDB storage, and a React/Vite client. MixDrop is the only video host used by the application. The backend submits remote imports to MixDrop and keeps API credentials off the browser; the watch page embeds MixDrop's returned player URL.
+Frame is a movie catalog with an Express API, MongoDB storage, and a React/Vite client. MixDrop is the only video host used by the application. Video files are uploaded through the backend to MixDrop's multipart upload API, so API credentials stay off the browser. The watch page embeds MixDrop's returned player URL.
 
 ## Configure MixDrop
 
 1. Create a MixDrop account and find the API email and key on the [MixDrop API page](https://mixdrop.ag/api).
 2. Copy `.env.example` to `.env` and set `MIXDROP_API_EMAIL` and `MIXDROP_API_KEY`. Never put these credentials in frontend environment variables or commit `.env`.
 3. For Render, enter the same two values as the `MIXDROP_API_EMAIL` and `MIXDROP_API_KEY` service environment variables.
-4. In the admin area, add a movie using a **public, direct-download HTTPS URL** for its video file. MixDrop's remote-upload API cannot generally import a hosted share page as if it were a direct video file.
-5. Check **Manage movies** and use **Refresh MixDrop status** while the import is queued or converting. Playback becomes available when MixDrop returns its embed URL.
+4. In the admin area, choose a video file up to 5 GB and save its movie details. The backend forwards the file as `multipart/form-data` to `https://ul.mixdrop.ag/api`.
+5. Check **Manage movies** and use **Refresh MixDrop status** to inspect conversion. Playback uses the embed URL returned by MixDrop.
 
 MixDrop limits API requests to 10 per second. The app only checks import status when an administrator presses the refresh button.
 

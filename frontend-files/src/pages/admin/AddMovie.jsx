@@ -10,7 +10,6 @@ const emptyForm = {
   duration: '',
   cast: '',
   posterUrl: '',
-  sourceUrl: '',
   downloadUrl: '',
   allowStreaming: true,
   allowDownload: false
@@ -20,6 +19,7 @@ export default function AddMovie() {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [videoFile, setVideoFile] = useState(null);
   const navigate = useNavigate();
 
   const update = (field) => (event) => {
@@ -32,16 +32,22 @@ export default function AddMovie() {
     setError('');
     setSaving(true);
     try {
-      await api.post('/admin/movies', {
-        ...form,
-        genre: form.genre.split(',').map((item) => item.trim()).filter(Boolean),
-        cast: form.cast.split(',').map((item) => item.trim()).filter(Boolean),
-        releaseYear: Number(form.releaseYear),
-        duration: form.duration ? Number(form.duration) : undefined
-      });
+      const payload = new FormData();
+      payload.append('file', videoFile);
+      payload.append('title', form.title);
+      payload.append('description', form.description);
+      payload.append('genre', JSON.stringify(form.genre.split(',').map((item) => item.trim()).filter(Boolean)));
+      payload.append('releaseYear', String(form.releaseYear));
+      payload.append('duration', form.duration ? String(form.duration) : '');
+      payload.append('cast', JSON.stringify(form.cast.split(',').map((item) => item.trim()).filter(Boolean)));
+      payload.append('posterUrl', form.posterUrl);
+      payload.append('downloadUrl', form.downloadUrl);
+      payload.append('allowStreaming', String(form.allowStreaming));
+      payload.append('allowDownload', String(form.allowDownload));
+      await api.post('/admin/movies', payload);
       navigate('/admin/movies');
     } catch (err) {
-      setError(err.response?.data?.message || 'Unable to queue this video on MixDrop.');
+      setError(err.response?.data?.message || 'Unable to upload this video to MixDrop.');
     } finally {
       setSaving(false);
     }
@@ -50,17 +56,16 @@ export default function AddMovie() {
   return (
     <div className="max-w-2xl mx-auto px-6 py-14">
       <h1 className="font-display text-3xl">Add a movie</h1>
-      <p className="text-muted text-sm mt-2">MixDrop will import the video from a public, direct-download URL.</p>
+      <p className="text-muted text-sm mt-2">Choose a video file to upload directly to MixDrop.</p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
-        <Field label="Direct video download URL">
+        <Field label="Video file (maximum 5 GB)">
           <input
-            type="url"
+            type="file"
             required
-            value={form.sourceUrl}
-            onChange={update('sourceUrl')}
+            accept="video/*,.mkv,.avi,.mov,.webm,.mpeg,.mpg,.3gp"
+            onChange={(event) => setVideoFile(event.target.files?.[0] || null)}
             className={inputClass}
-            placeholder="https://files.example.com/movie.mp4"
           />
         </Field>
 
@@ -111,8 +116,8 @@ export default function AddMovie() {
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
-        <button type="submit" disabled={saving} className="bg-gold text-bg rounded-md px-6 py-2.5 text-sm font-medium hover:bg-goldDeep transition-colors disabled:opacity-60">
-          {saving ? 'Sending to MixDrop…' : 'Import video and save movie'}
+        <button type="submit" disabled={saving || !videoFile} className="bg-gold text-bg rounded-md px-6 py-2.5 text-sm font-medium hover:bg-goldDeep transition-colors disabled:opacity-60">
+          {saving ? 'Uploading to MixDrop…' : 'Upload video and save movie'}
         </button>
       </form>
     </div>

@@ -81,7 +81,7 @@ export default function ManageMovies() {
                 Download
               </label>
               <DownloadUrlEditor movie={movie} onSave={saveDownloadUrl} />
-              {movie.mixdropRemoteId && (
+              {movie.mixdropFileRef && (
                 <button onClick={() => refreshMixDropStatus(movie)} className="text-gold hover:underline">
                   Refresh MixDrop status
                 </button>

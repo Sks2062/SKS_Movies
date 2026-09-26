@@ -1,15 +1,7 @@
+const fs = require('fs/promises');
 const Movie = require('./Movie');
 const User = require('./User');
-const { queueRemoteUpload, getRemoteStatus, getFileInfo } = require('./mixdropClient');
-
-const isHttpsUrl = (value) => {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && Boolean(url.hostname);
-  } catch {
-    return false;
-  }
-};
+const { uploadVideoFile, getFileInfo } = require('./mixdropClient');
 
 const getMixDropEmbedUrl = (value) => {
   try {
@@ -20,6 +12,23 @@ const getMixDropEmbedUrl = (value) => {
   } catch {
     return '';
   }
+};
+
+const toList = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [value];
+  } catch {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+};
+
+const isVideoFile = (file) => {
+  if (!file) return false;
+  const videoExtensions = /\.(mp4|m4v|mkv|mov|avi|webm|mpeg|mpg|3gp)$/i;
+  return file.mimetype?.startsWith('video/') || videoExtensions.test(file.originalname || '');
 };
 
 // @route GET /api/admin/movies
@@ -34,37 +43,43 @@ const listMovies = async (req, res) => {
 
 // @route POST /api/admin/movies
 const addMovie = async (req, res) => {
+  let tempFile;
   try {
-    if (!isHttpsUrl(req.body.sourceUrl)) {
-      return res.status(400).json({ message: 'Use an HTTPS direct-download URL for the video file.' });
+    tempFile = req.file?.path;
+    if (!isVideoFile(req.file)) {
+      return res.status(400).json({ message: 'Choose a supported video file to upload.' });
+    }
+    if (!req.body.title?.trim() || !req.body.description?.trim()) {
+      return res.status(400).json({ message: 'Movie title and description are required.' });
+    }
+    const uploadedFile = await uploadVideoFile(req.file);
+    const embedUrl = getMixDropEmbedUrl(uploadedFile?.embedurl);
+    if (!uploadedFile?.fileref || !embedUrl) {
+      return res.status(502).json({ message: 'MixDrop uploaded the file but did not return a valid player link.' });
     }
 
-    const remoteUpload = await queueRemoteUpload(req.body.sourceUrl, req.body.title);
-    if (!remoteUpload?.id) {
-      return res.status(502).json({ message: 'MixDrop did not return an import ID.' });
-    }
-    const embedUrl = getMixDropEmbedUrl(remoteUpload.embedurl);
     const movie = await Movie.create({
       title: req.body.title,
       description: req.body.description,
-      genre: req.body.genre,
-      releaseYear: req.body.releaseYear,
-      duration: req.body.duration,
-      cast: req.body.cast,
+      genre: toList(req.body.genre),
+      releaseYear: Number(req.body.releaseYear),
+      duration: req.body.duration ? Number(req.body.duration) : undefined,
+      cast: toList(req.body.cast),
       posterUrl: req.body.posterUrl,
       videoProvider: 'mixdrop',
       videoUrl: embedUrl,
-      mixdropRemoteId: String(remoteUpload.id),
-      mixdropFileRef: remoteUpload.fileref || '',
-      mixdropStatus: remoteUpload.fileref ? 'processing' : 'queued',
+      mixdropFileRef: String(uploadedFile.fileref),
+      mixdropStatus: 'Uploaded',
       downloadUrl: req.body.downloadUrl || '',
-      allowStreaming: req.body.allowStreaming,
-      allowDownload: req.body.allowDownload,
+      allowStreaming: req.body.allowStreaming !== 'false',
+      allowDownload: req.body.allowDownload === 'true',
       uploadedBy: req.user._id
     });
     res.status(201).json({ movie });
   } catch (err) {
     res.status(err.status || 500).json({ message: err.message });
+  } finally {
+    if (tempFile) await fs.rm(tempFile, { force: true }).catch(() => {});
   }
 };
 
@@ -73,15 +88,12 @@ const refreshMixDropStatus = async (req, res) => {
   try {
     const movie = await Movie.findById(req.params.id);
     if (!movie) return res.status(404).json({ message: 'Movie not found' });
-    if (!movie.mixdropRemoteId) return res.status(400).json({ message: 'This movie has no MixDrop import to check.' });
+    if (!movie.mixdropFileRef) return res.status(400).json({ message: 'This movie has no MixDrop file reference to check.' });
 
-    const result = await getRemoteStatus(movie.mixdropRemoteId);
-    movie.mixdropStatus = result.status || movie.mixdropStatus;
-    if (result.fileref) movie.mixdropFileRef = result.fileref;
-    if (!getMixDropEmbedUrl(movie.videoUrl) && movie.mixdropFileRef) {
-      const fileInfo = await getFileInfo(movie.mixdropFileRef);
-      movie.videoUrl = getMixDropEmbedUrl(result.embedurl || fileInfo?.embedurl);
-    }
+    const fileInfo = await getFileInfo(movie.mixdropFileRef);
+    if (!fileInfo) return res.status(404).json({ message: 'MixDrop could not find this uploaded file.' });
+    movie.mixdropStatus = fileInfo.status || movie.mixdropStatus;
+    movie.videoUrl = getMixDropEmbedUrl(fileInfo.embedurl) || movie.videoUrl;
     await movie.save();
     res.json({
       status: movie.mixdropStatus,

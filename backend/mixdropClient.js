@@ -1,3 +1,6 @@
+const fs = require('fs');
+const FormData = require('form-data');
+
 const getCredentials = () => {
   const email = process.env.MIXDROP_API_EMAIL;
   const key = process.env.MIXDROP_API_KEY;
@@ -10,37 +13,55 @@ const getCredentials = () => {
   return { email, key };
 };
 
-const request = async (endpoint, params) => {
-  const credentials = getCredentials();
-  const url = new URL(endpoint);
-  url.searchParams.set('email', credentials.email);
-  url.searchParams.set('key', credentials.key);
-  Object.entries(params).forEach(([name, value]) => {
-    if (Array.isArray(value)) value.forEach((item) => url.searchParams.append(name, item));
-    else if (value !== undefined && value !== null && value !== '') url.searchParams.set(name, value);
-  });
-
-  const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
-  if (!response.ok) {
-    throw Object.assign(new Error('MixDrop API request failed. Try again later.'), { status: 502 });
+const parseResponse = async (response) => {
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw Object.assign(new Error('MixDrop returned an unreadable response.'), { status: 502 });
   }
-  const payload = await response.json();
-  if (!payload.success) {
-    throw Object.assign(new Error(payload.message || 'MixDrop rejected the request. Check the source URL and API credentials.'), { status: 502 });
+  if (!response.ok || !payload.success) {
+    throw Object.assign(
+      new Error(payload.message || 'MixDrop rejected the request. Check the API credentials and video file.'),
+      { status: 502 }
+    );
   }
   return payload.result;
 };
 
-const queueRemoteUpload = (sourceUrl, name) => request('https://api.mixdrop.ag/remoteupload', {
-  url: sourceUrl,
-  name
-});
+const uploadVideoFile = async (file) => {
+  const { email, key } = getCredentials();
+  const form = new FormData();
+  const filename = (file.originalname || 'video').replace(/[\r\n"]/g, '_');
+  form.append('email', email);
+  form.append('key', key);
+  form.append('file', fs.createReadStream(file.path), {
+    filename,
+    contentType: file.mimetype || 'application/octet-stream'
+  });
 
-const getRemoteStatus = (id) => request('https://api.mixdrop.ag/remotestatus', { id });
+  const contentLength = await new Promise((resolve, reject) => {
+    form.getLength((error, length) => error ? reject(error) : resolve(length));
+  });
+  const response = await fetch('https://ul.mixdrop.ag/api', {
+    method: 'POST',
+    headers: { ...form.getHeaders(), 'content-length': String(contentLength) },
+    body: form,
+    duplex: 'half',
+    signal: AbortSignal.timeout(Number(process.env.MIXDROP_UPLOAD_TIMEOUT_MS) || 60 * 60 * 1000)
+  });
+  return parseResponse(response);
+};
 
 const getFileInfo = async (fileref) => {
-  const result = await request('https://api.mixdrop.ag/fileinfo2', { 'ref[]': [fileref] });
+  const { email, key } = getCredentials();
+  const url = new URL('https://api.mixdrop.ag/fileinfo2');
+  url.searchParams.set('email', email);
+  url.searchParams.set('key', key);
+  url.searchParams.append('ref[]', fileref);
+  const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  const result = await parseResponse(response);
   return result?.[fileref] || null;
 };
 
-module.exports = { queueRemoteUpload, getRemoteStatus, getFileInfo };
+module.exports = { uploadVideoFile, getFileInfo };
